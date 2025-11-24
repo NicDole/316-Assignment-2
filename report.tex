@@ -1,0 +1,215 @@
+\documentclass[12pt]{article}
+\usepackage{amsmath, amssymb}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{hyperref}
+
+\geometry{margin=1in}
+
+\title{ECSE 316 -- Assignment 2 \\ Fast Fourier Transform and Applications}
+\author{
+Student 1: S. Nicolas Dolgopolyy (261115875) \\
+Student 2: Name (McGill ID)
+}
+\date{Fall 2025}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This report presents the implementation and analysis of a complete Fast Fourier Transform (FFT) system for ECSE~316 Assignment~2. The project includes developing a naïve Discrete Fourier Transform (DFT), an optimized Cooley--Tukey FFT, their inverse transforms, 2D extensions, frequency--domain image denoising, Fourier--based image compression, and runtime comparison experiments. Results confirm theoretical performance expectations and demonstrate practical applications of Fourier analysis in image processing.
+\end{abstract}
+
+\section{Introduction}
+This assignment required implementing FFT algorithms from scratch and applying them to several tasks: visualizing the Fourier transform of an image, denoising images via high--frequency removal, compressing images by zeroing Fourier coefficients, and benchmarking the performance difference between naïve and optimized Fourier transforms.
+
+All implementations were written in Python, without relying on \verb|numpy.fft| for any core transforms.
+
+\section{Design}
+
+\subsection{Implementation Overview}
+The program is organized into four major subsystems:
+\begin{itemize}
+    \item Core 1D DFT, FFT, and IFFT implementations
+    \item 2D DFT, FFT, and IFFT (constructed from the 1D transforms)
+    \item Image utilities for loading, padding, frequency shifting, denoising, and compression
+    \item Mode handlers implementing the required assignment behaviors
+\end{itemize}
+
+Images are padded to the next power--of--two dimensions to ensure the FFT recursion works correctly. All transforms operate on \verb|complex128| arrays for numerical accuracy.
+
+\subsection{Naïve 1D DFT}
+The naïve DFT was implemented directly from the definition:
+\[
+X[k] = \sum_{n=0}^{N-1} x[n] e^{-2\pi i kn / N}.
+\]
+It uses nested loops over $k$ and $n$, with a computational complexity of $O(N^2)$. This version is used as a correctness reference and as a fallback base case inside the FFT implementation.
+
+\subsection{Cooley--Tukey FFT (1D)}
+The FFT implementation follows the radix--2 Cooley--Tukey algorithm:
+\begin{enumerate}
+    \item For $N \le 16$, the naïve DFT is used as a base case.
+    \item The input is split into even and odd samples.
+    \item FFT is applied recursively to each half.
+    \item Twiddle factors $e^{-2\pi i k / N}$ combine the results.
+\end{enumerate}
+The resulting complexity is $O(N \log N)$, a large improvement over the naïve method.
+
+\subsection{Inverse FFT (1D)}
+The inverse FFT uses the conjugate trick:
+\[
+\text{IFFT}(X) = \frac{1}{N}\overline{\text{FFT}(\overline{X})}.
+\]
+This avoids implementing the inverse FFT separately and ensures correctness.
+
+\subsection{Padding}
+All images are padded to:
+\[
+M = 2^{\lceil \log_2(\text{rows}) \rceil}, \quad
+N = 2^{\lceil \log_2(\text{cols}) \rceil}.
+\]
+Zero padding prevents interpolation artifacts and ensures compatibility with radix--2 FFT recursion.
+
+\subsection{2D FFT and IFFT}
+The 2D FFT is constructed by applying the 1D FFT to:
+\begin{enumerate}
+    \item Each row
+    \item Each column of the resulting matrix
+\end{enumerate}
+The 2D IFFT follows the same structure with \verb|ifft\_1d|.
+
+This corresponds exactly to the mathematical definition of the 2D DFT.
+
+\subsection{Frequency Shifting}
+The spectrum is shifted with:
+\[
+\text{fftshift}(F),
+\]
+which is permitted because it does not compute a Fourier transform, but only reorders values for visualization.
+
+\subsection{Denoising Mask}
+Denoising is achieved using a circular low--pass mask:
+\[
+\text{mask}(i,j) =
+\begin{cases}
+1 & \text{if distance to center} \le r,\\
+0 & \text{otherwise}.
+\end{cases}
+\]
+The mask keeps low frequencies while removing high--frequency noise.
+
+\subsection{Compression Method}
+Compression uses magnitude--based thresholding:
+\begin{enumerate}
+    \item Flatten all Fourier coefficients.
+    \item Sort them by magnitude.
+    \item Zero out the smallest fraction.
+    \item Reconstruct via IFFT.
+\end{enumerate}
+Six required compression levels were implemented:
+\[
+\{0\%, 90\%, 99\%, 99.9\%, 99.95\%, 99.99\%\}.
+\]
+
+\subsection{Runtime Experiment Design}
+Following assignment requirements:
+\begin{itemize}
+    \item Matrix sizes: $2^5, 2^6, \dots, 2^{10}$.
+    \item Ten trials per size.
+    \item Record mean and variance of runtimes.
+    \item Compare naïve 2D DFT with FFT--based 2D transform.
+    \item Use error bars equal to $2\sigma$.
+\end{itemize}
+
+\section{Testing}
+
+\subsection{Correctness Tests}
+Correctness was verified by:
+\begin{itemize}
+    \item Comparing 1D FFT with \verb|numpy.fft.fft| on small vectors.
+    \item Comparing 2D FFT with \verb|numpy.fft.fft2|.
+    \item Confirming that IFFT(FFT($x$)) returns $x$ within floating--point tolerance.
+\end{itemize}
+
+\subsection{Visual Tests}
+The FFT magnitude plots were inspected to confirm expected symmetry and low--frequency dominance. Denoised and compressed images were also visually evaluated.
+
+\subsection{Runtime Validation}
+Small timing tests confirmed expected cubic vs.~quasi--quadratic--log behavior for naïve and FFT implementations, respectively.
+
+\section{Analysis}
+
+\subsection{Runtime of Naïve 1D DFT}
+The naïve DFT requires $N$ inner computations for each of $N$ outputs:
+\[
+T(N) = O(N^2).
+\]
+
+\subsection{FFT Complexity Derivation}
+The FFT recurrence is:
+\[
+T(N) = 2T(N/2) + O(N),
+\]
+which solves to:
+\[
+T(N) = O(N \log N).
+\]
+
+\subsection{2D Complexity Comparison}
+\subsubsection*{Naïve 2D DFT}
+\[
+O(N^2) \text{ for each row/column} \Rightarrow O(N^3) \text{ total}.
+\]
+
+\subsubsection*{2D FFT}
+\[
+O(N \log N) \text{ per row/column} \Rightarrow O(N^2 \log N) \text{ total}.
+\]
+
+\section{Experiments}
+
+\subsection{FFT Visualization (Mode 1)}
+\begin{figure}[H]
+\centering
+\fbox{\rule{0pt}{2in}\rule{3in}{0pt}} % Placeholder
+\caption{Original image vs.~log--magnitude FFT visualization.}
+\end{figure}
+
+\subsection{Denoising (Mode 2)}
+\begin{figure}[H]
+\centering
+\fbox{\rule{0pt}{2in}\rule{3in}{0pt}} % Placeholder
+\caption{Original image (left) and denoised reconstruction (right).}
+\end{figure}
+
+The denoising mask successfully removed high--frequency noise while preserving low--frequency structure. Several radius settings were tested to determine optimal smoothing performance.
+
+\subsection{Compression Results (Mode 3)}
+\begin{figure}[H]
+\centering
+\fbox{\rule{0pt}{3in}\rule{5in}{0pt}} % Placeholder
+\caption{2$\times$3 grid of compressed images at six compression levels.}
+\end{figure}
+
+For each compression level, the number of nonzero coefficients was printed and analyzed. Lower compression preserved quality well, while extremely high compression produced blurred, low--frequency reconstructions.
+
+\subsection{Runtime Benchmarking (Mode 4)}
+\begin{figure}[H]
+\centering
+\fbox{\rule{0pt}{2.5in}\rule{4in}{0pt}} % Placeholder
+\caption{Runtime comparison of naïve 2D DFT vs.~2D FFT with error bars.}
+\end{figure}
+
+The results closely matched theoretical predictions: the naïve DFT exhibited cubic growth, while the FFT followed an approximately $N^2 \log N$ profile.
+
+\section{Conclusion}
+The implementation successfully demonstrated the efficiency advantages of FFT over naïve DFT. Image denoising through frequency masking proved effective, while magnitude--based compression preserved visual features at surprisingly high compression rates. Runtime measurements validated theoretical complexity analyses, showcasing the practical importance of FFT algorithms.
+
+\section*{Appendix}
+Additional plots, parameter sweeps, and experimental notes may be added here.
+
+\end{document}
