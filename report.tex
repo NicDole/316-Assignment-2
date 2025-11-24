@@ -12,8 +12,8 @@
 
 \title{ECSE 316 -- Assignment 2 \\ Fast Fourier Transform and Applications}
 \author{
-Student 1: S. Nicolas Dolgopolyy (261115875) \\
-Student 2: Name (McGill ID)
+S. Nicolas Dolgopolyy (261115875) \\
+Matthew Eiley (261177542)
 }
 \date{Fall 2025}
 
@@ -144,31 +144,51 @@ Small timing tests confirmed expected cubic vs.~quasi--quadratic--log behavior f
 \section{Analysis}
 
 \subsection{Runtime of Naïve 1D DFT}
-The naïve DFT requires $N$ inner computations for each of $N$ outputs:
+The 1D Discrete Fourier Transform directly applies the definition
 \[
-T(N) = O(N^2).
+X_k=\sum_{n=0}^{N-1}x_ne^{-2\pi ikn/N},\qquad k=0,\ldots, N-1
 \]
+For each of the $N$ output frequencies $X_K$, the algorithm performs a full sum over $N$ input samples. Each term involves a complex multiply and addition, so the total number of basic operations scales with the number of pairs $\left(k,n\right)$, i.e.,
+\[
+T\left(N\right) =N\cdot N= O\left(N^2\right).
+\]
+Thus the naïve DFT grows quadratically and becomes impractical for large inputs.
 
-\subsection{FFT Complexity Derivation}
-The FFT recurrence is:
+\subsection{FFT Complexity Derivation (1D)}
+The Cooley–Tukey Fast Fourier Transform reduces the work by splitting the DFT into its even-indexed and odd-indexed components. This yields the recurrence
 \[
-T(N) = 2T(N/2) + O(N),
+T\left(N\right) = 2T\left(\frac{N}{2}\right) + O\left(N\right),
 \]
-which solves to:
+where:
+\begin{itemize}
+    \item the two subproblems of size $N/2$ come from computing the DFT of the even and odd entries, and
+    \item the $O\left(N\right)$ term accounts for combining the two halves using the pre-computed twiddle factors.
+\end{itemize}
+This recurrence matches the standard divide-and-conquer form analyzed by the Master Theorem. Applying the $T\left(N\right)=2T\left(N/2\right)+N$ case gives:
 \[
-T(N) = O(N \log N).
+T\left(N\right) = O\left(N \log N\right).
 \]
+Therefore, the FFT is exponentially faster than the naïve DFT for large N. 
 
 \subsection{2D Complexity Comparison}
+
+The 2D DFT is computed by applying the 1D transform across all rows and then across all columns (or vice-versa). If the input is an $N\times N$ image, this structure lets us reason about complexity using the 1D results.
+
 \subsubsection*{Naïve 2D DFT}
+A single 1D naïve DFT takes $O\left(N^2\right)$.\\
+There are $N$ rows and $N$ columns, so performing $2N$ such transformations gives
 \[
-O(N^2) \text{ for each row/column} \Rightarrow O(N^3) \text{ total}.
+O\left(N\right)\cdot O\left(N^2\right) + O\left(N\right)\cdot O\left(N^2\right) = O\left(N^3\right).
 \]
+Thus, the 2D naïve DFT scales cubically with image size.
 
 \subsubsection*{2D FFT}
+A single 1D FFT takes $O\left(N \log N\right)$.\\
+Applying this to all rows and columns yields
 \[
-O(N \log N) \text{ per row/column} \Rightarrow O(N^2 \log N) \text{ total}.
+O\left(N\right)\cdot O\left(N\log N\right) + O\left(N\right)\cdot O\left(N\log N\right) = O\left(N^2\log N\right).
 \]
+We do not need to re-derive the FFT recurrence again as the same divide-and-conquer idea applies independently to each 1D transform. The result is that the 2D FFT achieves a full order-of-magnitude improvement over the naïve method, scaling quasi-linearly in the number of pixels.
 
 \section{Experiments}
 
