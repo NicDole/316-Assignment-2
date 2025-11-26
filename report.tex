@@ -25,105 +25,89 @@ This report presents the implementation and analysis of a complete Fast Fourier 
 \end{abstract}
 
 \section{Introduction}
-This assignment required implementing FFT algorithms from scratch and applying them to several tasks: visualizing the Fourier transform of an image, denoising images via high--frequency removal, compressing images by zeroing Fourier coefficients, and benchmarking the performance difference between naïve and optimized Fourier transforms.
+The Discrete Fourier Transform (DFT) is a fundamental tool for analyzing signals and images in the frequency domain. Although the DFT provides an exact representation of frequency content, its direct computation requires $O\left(N^2\right)$ operations, making it impractical for large signals or 2D data such as images. The Fast Fourier Transform (FFT), specifically the Cooley–Tukey algorithm, reduces this cost to $O\left(N\log N\right)$ by exploiting symmetries in the DFT and applying a divide-and-conquer strategy.\\
+\\
+The goal of this assignment is to implement both the naïve DFT and the FFT from first principles, use them to compute 1D and 2D transforms, and apply these transforms to real image-processing tasks. We build our own FFT rather than relying on library functions, allowing us to explore its algorithmic structure, understand the reason behind its significant speed advantage, and verify its correctness through comparison with NumPy’s implementations.\\
+\\
+Beyond computing transforms, the assignment also demonstrates practical uses of the FFT, including frequency-domain denoising, image compression by coefficient thresholding, and empirical runtime analysis. Together, these components highlight both the mathematical foundations and real-world utility of Fourier-based techniques in signal and image processing.
 
-All implementations were written in Python, without relying on \verb|numpy.fft| for any core transforms.
 
 \section{Design}
+Our implementation follows a modular, bottom-up design that builds the full 2D FFT system from small, well-defined components. The main idea is to implement the core numerical operations ourselves (as required) while relying on NumPy and Matplotlib only for array manipulation and visualization.
 
-\subsection{Implementation Overview}
-The program is organized into four major subsystems:
-\begin{itemize}
-    \item Core 1D DFT, FFT, and IFFT implementations
-    \item 2D DFT, FFT, and IFFT (constructed from the 1D transforms)
-    \item Image utilities for loading, padding, frequency shifting, denoising, and compression
-    \item Mode handlers implementing the required assignment behaviors
-\end{itemize}
+\subsection{Design of the 1D Transforms}
 
-Images are padded to the next power--of--two dimensions to ensure the FFT recursion works correctly. All transforms operate on \verb|complex128| arrays for numerical accuracy.
+\subsubsection{Naïve 1D DFT}
 
-\subsection{Naïve 1D DFT}
-The naïve DFT was implemented directly from the definition:
+The function \verb|dft_naive_1d| directly evaluates the DFT definition. For each output frequency index $k$, it performs a full loop over all input samples $n$, computing
 \[
-X[k] = \sum_{n=0}^{N-1} x[n] e^{-2\pi i kn / N}.
+x_ne^{-2\pi ikn/N}
 \]
-It uses nested loops over $k$ and $n$, with a computational complexity of $O(N^2)$. This version is used as a correctness reference and as a fallback base case inside the FFT implementation.
+This double loop structure mirrors the mathematical formula and ensures correctness without optimization. The implementation uses complex NumPy scalars but performs all iteration in pure Python to preserve the $O\left( N^2\right)$ ) behavior required for benchmarking.
 
-\subsection{Cooley--Tukey FFT (1D)}
-The FFT implementation follows the radix--2 Cooley--Tukey algorithm:
+\subsubsection{Recrusive 1D FFT (Cooley--Tukey)}
+
+The FFT is implemented in \verb|fft_1d| using the radix-2 Cooley-Tukey divide-and-conquer approach:
 \begin{enumerate}
-    \item For $N \le 16$, the naïve DFT is used as a base case.
-    \item The input is split into even and odd samples.
-    \item FFT is applied recursively to each half.
-    \item Twiddle factors $e^{-2\pi i k / N}$ combine the results.
+    \item \textbf{Base Case:}\\For inputs of size $N\leq 16$, the algorithm calls \verb|dft_naive_1d|. This avoids recursion overhead on small subproblems and matches typical FFT libraries, which switch to a direct method at small sizes.
+    \item \textbf{Divide Step:}\\The input signal is split into even-indexed and odd-indexed elements using Python slicing (\verb|x[0::2]|, \verb|x[1::2]|). 
+    \item \textbf{Recursive Step:}\\FFTs of the even and odd halves are computed separately by calling \verb|fft_1d| again.
+    \item \textbf{Combine Step:}\\Twiddle factors $e^{-2\pi ik/N}$ are generated once using a vectorized NumPy expression. The two halves are combined into the full spectrum using the standard Cooley–Tukey recombination:
+    \[
+    X\left[k\right] = E\left[k\right] + \omega_{N}^{k}O\left[k\right], \quad X\left[k+n/2\right] = E\left[k\right] - \omega_{N}^{k}O\left[k\right]
+    \]
 \end{enumerate}
-The resulting complexity is $O(N \log N)$, a large improvement over the naïve method.
+This design strictly enforces that input lengths be powers of two, so upstream code pads images when necessary.
 
-\subsection{Inverse FFT (1D)}
-The inverse FFT uses the conjugate trick:
-\[
-\text{IFFT}(X) = \frac{1}{N}\overline{\text{FFT}(\overline{X})}.
-\]
-This avoids implementing the inverse FFT separately and ensures correctness.
+\subsubsection{Inverse FFT}
 
-\subsection{Padding}
-All images are padded to:
-\[
-M = 2^{\lceil \log_2(\text{rows}) \rceil}, \quad
-N = 2^{\lceil \log_2(\text{cols}) \rceil}.
-\]
-Zero padding prevents interpolation artifacts and ensures compatibility with radix--2 FFT recursion.
-
-\subsection{2D FFT and IFFT}
-The 2D FFT is constructed by applying the 1D FFT to:
+The inverse transform \verb|ifft_1d| uses the standard conjugate trick:
 \begin{enumerate}
-    \item Each row
-    \item Each column of the resulting matrix
+    \item Conjugate the input,
+    \item Call the forward FFT,
+    \item Conjugate again and divide by N.
 \end{enumerate}
-The 2D IFFT follows the same structure with \verb|ifft\_1d|.
+This reuses the tested FFT logic, ensuring numerical consistency and minimizing duplicated code.
 
-This corresponds exactly to the mathematical definition of the 2D DFT.
+\subsection{Design of the 2D Transforms}
 
-\subsection{Frequency Shifting}
-The spectrum is shifted with:
-\[
-\text{fftshift}(F),
-\]
-which is permitted because it does not compute a Fourier transform, but only reorders values for visualization.
+The 2D transforms reuse the 1D routines exactly, following the mathematical structure of the 2D DFT.
 
-\subsection{Denoising Mask}
-Denoising is achieved using a circular low--pass mask:
-\[
-\text{mask}(i,j) =
-\begin{cases}
-1 & \text{if distance to center} \le r,\\
-0 & \text{otherwise}.
-\end{cases}
-\]
-The mask keeps low frequencies while removing high--frequency noise.
+\subsubsection{2D FFT}
 
-\subsection{Compression Method}
-Compression uses magnitude--based thresholding:
+\verb|fft_2d| applies \verb|fft_1d| across:
 \begin{enumerate}
-    \item Flatten all Fourier coefficients.
-    \item Sort them by magnitude.
-    \item Zero out the smallest fraction.
-    \item Reconstruct via IFFT.
+    \item \textbf{Rows:} Each row is treated as an independent 1D signal.
+    \item \textbf{Columns:} After transforming the rows, the algorithm applies \verb|fft_1d| to each column of the intermediate matrix.
 \end{enumerate}
-Six required compression levels were implemented:
-\[
-\{0\%, 90\%, 99\%, 99.9\%, 99.95\%, 99.99\%\}.
-\]
+This row-then-column approach matches the separability property of the Fourier transform and ensures a total runtime of $O\left(N^2\log N\right)$ for an $N\times N$ image.
 
-\subsection{Runtime Experiment Design}
-Following assignment requirements:
-\begin{itemize}
-    \item Matrix sizes: $2^5, 2^6, \dots, 2^{10}$.
-    \item Ten trials per size.
-    \item Record mean and variance of runtimes.
-    \item Compare naïve 2D DFT with FFT--based 2D transform.
-    \item Use error bars equal to $2\sigma$.
-\end{itemize}
+\subsubsection{2D Inverse FFT}
+
+\verb|ifft_2d| mirrors the same structure, applying \verb|ifft_1d| across rows and columns. Because \verb|ifft_1d| calls the forward FFT internally, both transforms share the same core logic.
+
+\subsubsection{Naïve 2D FFT}
+
+To enable runtime comparisons, \verb|naive_dft_2d| applies the slow 1D DFT along each row and column, giving the expected cubic runtime $O\left(N^3\right)$. This function is used exclusively in Mode 4 and is not involved in any image operations.
+
+\subsection{Image Preprocessing and Data Handling}
+
+Before applying the FFT, images are loaded in grayscale and converted to floating-point arrays.\\
+\\
+Because the recursive FFT implementation requires power-of-two dimensions, the helper function \verb|pad_to_power_of_two| pads images with zeros in both dimensions.\\
+\\
+For visualization, \verb|fftshift_2d| is used (via NumPy’s \verb|fftshift|) solely to center the low-frequency content when plotting spectra. This does not affect the core FFT algorithm since no numerical shortcuts rely on shifting.
+
+\subsection{Application Modes}
+
+The program supports four modes, each built around the core FFT components:
+\begin{enumerate}
+    \item \textbf{Mode 1 (Visualization):}\\Computes the 2D FFT, shifts it, and displays the magnitude spectrum on a logarithmic scale.
+    \item \textbf{Mode 2 (Denoising):}\\Applies a low-frequency circular mask in the frequency domain before performing the inverse FFT. The mask is generated by \verb|low_frequency_mask|.
+    \item \textbf{Mode 3 (Compression):}\\Flattens the 2D frequency matrix, sorts coefficients by magnitude, and zeroes out the smallest fraction to achieve multiple compression levels. Each compressed frequency matrix is inverted using \verb|ifft_2d| and displayed.
+    \item \textbf{Mode 4 (Runtime Testing):}\\Measures the runtime of \verb|naive_dft_2d| vs. \verb|fft_2d| across increasing matrix sizes and plots mean runtimes with error bars.
+\end{enumerate}
+Each mode is implemented as an isolated function, making the design easy to extend and ensuring that the FFT code is reused consistently throughout the assignment.
 
 \section{Testing}
 
