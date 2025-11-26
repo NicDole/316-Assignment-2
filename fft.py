@@ -416,7 +416,8 @@ def run_mode3(image_path):
     # Define compression levels:
     # fraction_zero is the fraction of coefficients set to zero
     # must include 0 percent and 99.9 percent
-    compression_levels = [0.0, 0.9, 0.99, 0.999, 0.9995, 0.9999]
+    # compression_levels = [0.0, 0.9, 0.99, 0.999, 0.9995, 0.9999]
+    compression_levels = [0.0, 0.50, 0.90, 0.95, 0.99, 0.999]
 
     images = []
     titles = []
