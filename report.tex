@@ -111,19 +111,60 @@ Each mode is implemented as an isolated function, making the design easy to exte
 
 \section{Testing}
 
-\subsection{Correctness Tests}
-Correctness was verified by:
-\begin{itemize}
-    \item Comparing 1D FFT with \verb|numpy.fft.fft| on small vectors.
-    \item Comparing 2D FFT with \verb|numpy.fft.fft2|.
-    \item Confirming that IFFT(FFT($x$)) returns $x$ within floating--point tolerance.
+To ensure that all components of our DFT and FFT implementations behaved correctly, we performed a series of structured tests on both synthetic data and real images. Our testing strategy focused on three main aspects: numerical correctness, consistency with known properties of the Fourier transform, and performance scaling.
+
+\subsection{Correctness of the 1D Transform Implementations}
+We began by testing the 1D naïve DFT and FFT functions on small input vectors where the expected output can be computed manually or compared directly: \begin{itemize}
+    \item \textbf{Small synthetic vectors:}\\We generated short arrays of length 4, 8, and 16 consisting of simple patterns (e.g., constant, linear ramp, alternating signs). For each array, we verified that:
+    \begin{itemize}
+        \item \verb|fft_1d(x)| matched \verb|dft_naive_1d(x)| up to numerical precision.
+        \item Applying \verb|ifft_1d(fft_1d(x))| reconstructed the original array with negligible error.
+    \end{itemize}
+    \item \textbf{Randomized tests:}\\For randomly generated complex vectors, we checked:
+    \[
+    \verb|ifft_1d(fft_1d(x))|\approx \verb|x|,
+    \]
+    using the maximum absolute reconstruction error as a criterion.
 \end{itemize}
+These tests confirmed that the recursive FFT and the inverse transform were implemented correctly and produced the same results as the mathematically direct method.
 
-\subsection{Visual Tests}
-The FFT magnitude plots were inspected to confirm expected symmetry and low--frequency dominance. Denoised and compressed images were also visually evaluated.
+\subsection{Validation of 2D Transforms}
+For the 2D transforms, correctness was assessed through two complementary approaches:
+\begin{itemize}
+    \item \textbf{Row–column separability check:}\\We verified on small matrices that:
+    \begin{itemize}
+        \item Applying \verb|fft_1d| manually to rows and then to columns produced the same result as our \verb|fft_2d| implementation.
+        \item Likewise, \verb|ifft_2d(fft_2d(A))| recovered the original matrix $A$ up to floating-point tolerance.
+    \end{itemize}
+    \item \textbf{Comparison with NumPy’s built-in FFT:}\\For randomly generated $N\times N$ matrices and for real image inputs:
+    \begin{itemize}
+        \item We computed the output of our \verb|fft_2d| and compared it with \verb|np.fft.fft2| after adjusting for the difference in frequency layout (via \verb|fftshift|).
+        \item Magnitude and phase differences remained at the level of numerical rounding error.
+    \end{itemize}
+\end{itemize}
+This confirmed that the 2D version correctly extends the 1D FFT and is consistent with standard reference implementations.
 
-\subsection{Runtime Validation}
-Small timing tests confirmed expected cubic vs.~quasi--quadratic--log behavior for naïve and FFT implementations, respectively.
+\subsection{Image-Domain Sanity Checks}
+To ensure correct behavior in practical use:
+\begin{itemize}
+    \item \textbf{Reconstruction tests:}\\Converting an image to the frequency domain and back using \verb|fft_2d| followed by \verb|ifft_2d| produced images that were visually identical to the input (aside from negligible floating-point noise).
+    \item \textbf{High-frequency filtering:}\\In Mode 2, we verified that progressively shrinking the low-pass mask produced smoother images, and turning the mask off entirely restored the original image.
+    \item \textbf{Compression behaviour:}\\In Mode 3, we confirmed that thresholding a larger portion of small-magnitude coefficients monotonically increased reconstruction artifacts, as expected in frequency-based compression.
+\end{itemize}
+These qualitative tests provided additional confidence in the correctness of our frequency-domain manipulations.
+
+\subsection{Runtime Testing}
+For Mode 4, we tested the scaling behavior of both algorithms:
+\begin{itemize}
+    \item We ran both \verb|naive_dft_2d| and \verb|fft_2d| on random matrices of sizes $32,64,\ldots, 1024$.
+    \item Each test was repeated 10 times to compute mean runtimes and variances.
+    \item The measured scaling trends matched theoretical expectations:
+    \begin{itemize}
+        \item The naïve method grew approximately as $O\left(N^3\right)$
+        \item The FFT grew approximately as $O\left(N^2\log N\right)$
+    \end{itemize}
+\end{itemize}
+This verified not only the correctness but also the efficiency of our FFT implementation.
 
 \section{Analysis}
 
