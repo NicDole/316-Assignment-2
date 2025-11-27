@@ -280,16 +280,26 @@ Below are observations for each compression level:
 During the experiment, we also recorded the number of non-zero coefficients for each level (printed by the program). As expected, the sparse representation becomes dramatically smaller at high compression rates, demonstrating the FFT’s ability to capture crucial image information in only a small fraction of coefficients.
 
 \subsection{Runtime Evaluation: Naïve 2D DFT vs. 2D FFT}
-To evaluate the efficiency of our implementation, we generated square random matrices of sizes $2^5$ through $2^{10}$ (32 to 1024) and measured the runtime of both algorithms over 10 trials per size. We calculated the mean and variance for each method and plotted the results with error bars corresponding to approximately 97\% confidence intervals (twice the standard deviation).\\
+To evaluate the efficiency of our implementation, we generated square random matrices of sizes $2^5$ through $2^{9}$ (32 to 512) and measured the runtime of both algorithms over 10 trials per size. We calculated the mean and variance for each method and plotted the results with error bars corresponding to approximately 97\% confidence intervals (twice the standard deviation).\\
 \\
-IMAGE (runtime plot: naïve 2D DFT vs. FFT with error bars)\\
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.8\textwidth]{experiment_4_1.png}
+    \caption{Naïve 2D DFT vs. FFT Plot}
+\end{figure}
+\\
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.8\textwidth]{experiment_4_2.png}
+    \caption{Naïve 2D DFT vs. FFT Specs Printout}
+\end{figure}
 \\
 The runtime plot clearly illustrates the difference in asymptotic behavior:
 \begin{itemize}
     \item The naïve 2D DFT grows roughly as $O\left(N^3\right)$, becoming prohibitively slow beyond $N=128$.
     \item The 2D FFt grows as $O\left(N^2\log N\right)$, allowing it to scale to much larger matrices efficiently
 \end{itemize}
-For the largest size tested ($N=1024$), the FFT was multiple orders of magnitude faster than the naïve method, aligning with the theoretical analysis presented earlier in the report.
+For the largest size tested ($N=512$), the FFT was multiple orders of magnitude faster than the naïve method, aligning with the theoretical analysis presented earlier in the report.
 
 \section{Conclusion}
 
