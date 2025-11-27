@@ -470,7 +470,7 @@ def run_mode4():
     print means and variances
     plot runtime vs size
     """
-    sizes = [2 ** n for n in range(5, 11)]  # 32 to 1024
+    sizes = [2 ** n for n in range(5, 10)]  # 32 to 512
     trials = 10
 
     naive_means = []
