@@ -21,7 +21,7 @@ Matthew Eiley (261177542)
 \maketitle
 
 \begin{abstract}
-This report presents the implementation and analysis of a complete Fast Fourier Transform (FFT) system for ECSE~316 Assignment~2. The project includes developing a naïve Discrete Fourier Transform (DFT), an optimized Cooley--Tukey FFT, their inverse transforms, 2D extensions, frequency--domain image denoising, Fourier--based image compression, and runtime comparison experiments. Results confirm theoretical performance expectations and demonstrate practical applications of Fourier analysis in image processing.
+This report presents the implementation and analysis of a complete Fast Fourier Transform (FFT) system for ECSE~316 Assignment~2. The project includes developing a naïve Discrete Fourier Transform (DFT), an optimized Cooley--Tukey FFT, their inverse transforms, 2D extensions, frequency--domain image denoising, Fourier--based image compression, and runtime comparison experiments. Our results match the expected runtimes and show how the FFT can be used for image denoising and compression.
 \end{abstract}
 
 \section{Introduction}
@@ -97,6 +97,10 @@ Before applying the FFT, images are loaded in grayscale and converted to floatin
 Because the recursive FFT implementation requires power-of-two dimensions, the helper function \verb|pad_to_power_of_two| pads images with zeros in both dimensions.\\
 \\
 For visualization, \verb|fftshift_2d| is used (via NumPy’s \verb|fftshift|) solely to center the low-frequency content when plotting spectra. This does not affect the core FFT algorithm since no numerical shortcuts rely on shifting.
+
+\paragraph{Effect of Padding on Reconstruction.}
+Because the recursive FFT requires power-of-two dimensions, zero-padding is applied around the image before transformation. This padding only introduces constant-valued borders in the frequency domain and does not alter the interior content. After applying the inverse FFT, the padded rows and columns can simply be discarded to recover the original image dimensions, and the reconstruction is exact up to floating-point precision.
+
 
 \subsection{Application Modes}
 
@@ -180,6 +184,35 @@ T\left(N\right) =N\cdot N= O\left(N^2\right).
 Thus the naïve DFT grows quadratically and becomes impractical for large inputs.
 
 \subsection{FFT Complexity Derivation (1D)}
+
+Starting from the 1D DFT definition
+\[
+X_k = \sum_{n=0}^{N-1} x_n \omega_N^{kn}, \qquad \omega_N = e^{-2\pi i / N},
+\]
+we first split the sum into its even and odd indices:
+\[
+X_k = \sum_{m=0}^{N/2-1} x_{2m}\,\omega_N^{k(2m)} + \sum_{m=0}^{N/2-1} x_{2m+1}\,\omega_N^{k(2m+1)}.
+\]
+Using the identity $\omega_N^{2} = \omega_{N/2}$, this can be rewritten as
+\[
+X_k = \sum_{m=0}^{N/2-1} x_{2m}\,\omega_{N/2}^{km}
+    + \omega_N^{k}\sum_{m=0}^{N/2-1} x_{2m+1}\,\omega_{N/2}^{km}.
+\]
+If we define the two $N/2$-point DFTs
+\[
+E_k = \sum_{m=0}^{N/2-1} x_{2m}\,\omega_{N/2}^{km}, 
+\qquad
+O_k = \sum_{m=0}^{N/2-1} x_{2m+1}\,\omega_{N/2}^{km},
+\]
+then each output coefficient can be written as
+\[
+X_k = E_k + \omega_N^{k} O_k, 
+\qquad
+X_{k+N/2} = E_k - \omega_N^{k} O_k,\quad k = 0,\ldots,\frac{N}{2}-1.
+\]
+Computing all $E_k$ and $O_k$ therefore amounts to solving two subproblems of size $N/2$, and for each $k$ we spend constant work to form the two combined outputs using the precomputed twiddle factor $\omega_N^{k}$.
+
+
 The Cooley–Tukey Fast Fourier Transform reduces the work by splitting the DFT into its even-indexed and odd-indexed components. This yields the recurrence
 \[
 T\left(N\right) = 2T\left(\frac{N}{2}\right) + O\left(N\right),
@@ -198,6 +231,13 @@ Therefore, the FFT is exponentially faster than the naïve DFT for large N.
 \subsection{2D Complexity Comparison}
 
 The 2D DFT is computed by applying the 1D transform across all rows and then across all columns (or vice-versa). If the input is an $N\times N$ image, this structure lets us reason about complexity using the 1D results.
+
+Because the 2D transform is separable, our implementations \verb|naive_dft_2d| and \verb|fft_2d| do not work on all $N^2$ pixels at once. Instead, they perform $N$ independent 1D transforms along the rows, then $N$ independent 1D transforms along the columns of the intermediate result. In big-$O$ terms, the total cost is therefore
+\[
+\text{(number of 1D transforms)} \times \text{(cost per 1D transform)},
+\]
+with a factor of $2N$ coming from the $N$ row transforms plus $N$ column transforms. Constants like the factor of $2$ are dropped in big-$O$, but this counting makes the link from the 1D to the 2D complexity precise.
+
 
 \subsubsection*{Naïve 2D DFT}
 A single 1D naïve DFT takes $O\left(N^2\right)$.\\
@@ -230,6 +270,11 @@ We began by loading the provided grayscale image and computing its 2D Fourier tr
 The log-scaled spectrum reveals that most of the image’s energy is concentrated in the low-frequency region near the center, with higher frequencies capturing edges and fine detail.\\
 \\
 To validate correctness, we computed the reference transform using NumPy’s np.fft.fft2. After adjusting for frequency shifting, the two results matched up to numerical floating-point error. The maximum difference between the two complex-valued outputs was on the order of $10^{-10}$, confirming the correctness of our implementation.
+
+\paragraph{Alignment with NumPy’s Output.}
+When comparing our \verb|fft_2d| results to \verb|np.fft.fft2|, we needed to account for differences in frequency layout. NumPy’s output places the zero-frequency component at the \((0,0)\) corner, whereas our visualization uses \verb|fftshift| to center the low-frequency content for interpretability. To make the comparison valid, we applied the same shift to NumPy’s output before computing numerical differences. Once both spectra were aligned in this way, the magnitude and phase values matched up to floating-point precision, confirming that the indexing conventions rather than the transform itself were responsible for any apparent discrepancies.
+
+
 \begin{figure}[h!]
     \centering
     \includegraphics[width=1\textwidth]{experiment_1_2.png}
@@ -253,10 +298,31 @@ The figure below shows several denoised versions of the image corresponding to d
 \\
 At very small cutoff radii (e.g., \verb|radius_ratio = 0.05|), the reconstructed image becomes overly smooth and loses essential structural information. A medium-sized radius (e.g., 0.15–0.25) successfully removes high-frequency noise while preserving major edges and contours. Larger radii result in minimal denoising because most of the high frequencies are retained.\\
 \\
+From a compression perspective, the circular low-pass mask can also be viewed as a very simple spectral compression scheme. For a given radius, only the coefficients inside the central low-frequency disk are kept, and all remaining high-frequency coefficients are set exactly to zero. If we denote by $r$ the radius in frequency space and by $R$ the maximum radius, then the fraction of retained coefficients is roughly proportional to $(r/R)^2$, so a small mask radius corresponds to storing only a small subset of all $N^2$ Fourier coefficients plus the mask parameters. In other words, each masked reconstruction in this section is not only a denoised image but also a compressed representation that discards most high-frequency information in a structured, low-pass way.
+
 Overall, the best results were obtained when keeping only the lowest 15–25\% of the frequency radius. This preserved the dominant image content while suppressing noise, demonstrating the effectiveness of frequency-domain filtering.
 
+\subsubsection*{Comparison of Denoising Procedures}
+
+To better understand what type of frequency removal produces the best denoising effect, we compared several variants in addition to the circular low-pass mask used above. These tests parallel the compression schemes discussed later, but here the focus is solely on image quality.
+
+\paragraph{Removing high frequencies (low-pass filtering).}
+This is the procedure used in our main denoising experiments. High frequencies primarily encode sharp edges, noise, and fine detail, so eliminating them produces a smooth, visually clean result. As the mask radius decreases, the image becomes progressively softer, but the large-scale structure remains stable for a relatively wide range of cutoff values.
+
+\paragraph{Removing low frequencies.}
+As a sanity check, we also tested the opposite procedure: setting the low-frequency components to zero while keeping the higher frequencies intact. As expected, this produced an image dominated by sharp outlines and high-contrast edges, with almost all gradual shading lost. This behavior is consistent with the fact that low frequencies encode the smooth, slowly varying parts of the image. Because this emphasized noise rather than suppressing it, it confirmed that the low-pass approach above was performing the intended denoising.
+
+\paragraph{Global magnitude thresholding.}
+We additionally tested applying a global threshold on the magnitude of the Fourier coefficients: coefficients below a chosen cutoff were set to zero, and the rest were kept. Unlike the circular mask, this method does not prioritize low frequencies; instead, it keeps any coefficient that carries sufficient energy. In practice, this preserved many important edge-related coefficients while still removing very small coefficients that mostly represent noise. However, for denoising specifically, this procedure often retained high-frequency components that contribute visually to noise. The resulting images showed less smoothing than low-pass filtering for comparable levels of coefficient removal.
+
+\paragraph{Conclusion.}
+Among the procedures tested, the low-pass circular mask produced the best denoising results. Removing high frequencies directly targets noise-dominant components, and the spatial structure of the mask ensures coherent smoothing across the image. Removing low frequencies produces edge-only images and is unsuitable for denoising, while global magnitude thresholding does reduce some noise but tends to preserve many high-frequency components that prevent strong visual smoothing. Consequently, for denoising, keeping only the low-frequency region and discarding the rest is the most effective and most controllable method.
+
+
 \subsection{Frequency-Based Image Compression}
-We next performed compression by thresholding the Fourier coefficients by magnitude. After flattening the 2D frequency array, we sorted coefficients and zeroed out the smallest magnitudes according to six compression levels ranging from 0\% to 99.9\% removed. Each thresholded coefficient array was then inverted using our \verb|ifft_2d| to reconstruct an approximate image.
+We experimented with two compression schemes in the frequency domain. The first scheme uses the circular low-pass mask from Section~5.2 and treats it as a structured compression method that keeps only low-frequency coefficients and sets all others to zero. The second scheme is an unstructured, global magnitude scheme that keeps the coefficients with largest magnitude regardless of their location in the spectrum. For the magnitude-based scheme, after flattening the 2D frequency array, we sorted coefficients and zeroed out the smallest magnitudes according to six compression levels ranging from 0\% to 99.9\% removed. Each thresholded coefficient array was then inverted using our \verb|ifft_2d| to reconstruct an approximate image.
+
+Qualitatively, the low-pass mask scheme produces very smooth images that preserve large-scale structure but noticeably blur edges once the radius is small, since all high-frequency information is discarded together. In contrast, the magnitude-thresholding scheme tends to preserve sharp edges and dominant features much better for the same number of non-zero coefficients, because many important edge-related coefficients have relatively large magnitude even at higher frequencies. Based on these observations, we used the low-pass scheme as a simple baseline and focused our detailed quantitative experiments and visual comparisons on the magnitude-thresholding scheme, which provided better visual quality at comparable compression ratios.
 \begin{figure}[h!]
     \centering
     \includegraphics[width=1\textwidth]{experiment_3_1.png}
@@ -264,7 +330,7 @@ We next performed compression by thresholding the Fourier coefficients by magnit
 \end{figure}
 \begin{figure}[h!]
     \centering
-    \includegraphics[width=0.8\textwidth]{experiment_3_2.png}
+    \includegraphics[width=0.8\textwidth]{experiment_3_2.jpg}
     \caption{Image Compression Printout}
 \end{figure}
 \\
@@ -277,7 +343,7 @@ Below are observations for each compression level:
     \item \textbf{99\% zeroed:} Noticeable loss of detail. Major shapes are preserved but edges are blurred.
     \item \textbf{99.9\% zeroed:} Image becomes heavily degraded. The original structure is essentially unrecognizable. 
 \end{itemize}
-During the experiment, we also recorded the number of non-zero coefficients for each level (printed by the program). As expected, the sparse representation becomes dramatically smaller at high compression rates, demonstrating the FFT’s ability to capture crucial image information in only a small fraction of coefficients.
+During the experiment, we also recorded the number of non-zero coefficients for each level (printed by the program). As expected, the sparse representation becomes dramatically smaller at high compression rates, demonstrating the FFT’s ability to capture crucial image information in only a small fraction of coefficients. All reported file sizes for the compressed outputs in Figure 6 are measured in kilobytes (KB).
 
 \subsection{Runtime Evaluation: Naïve 2D DFT vs. 2D FFT}
 To evaluate the efficiency of our implementation, we generated square random matrices of sizes $2^5$ through $2^{9}$ (32 to 512) and measured the runtime of both algorithms over 10 trials per size. We calculated the mean and variance for each method and plotted the results with error bars corresponding to approximately 97\% confidence intervals (twice the standard deviation).\\
@@ -307,8 +373,6 @@ This assignment provided a complete end-to-end exploration of the Discrete Fouri
 \\
 The experimental results confirmed the expected theoretical behavior. The FFT reproduced NumPy’s \verb|np.fft.fft2| output up to floating-point precision, validating the correctness of our implementation. Frequency-domain denoising demonstrated how image noise is concentrated in high frequencies, while low-frequency masking produced clean reconstructions with minimal loss of detail. Compression experiments further showed that most natural image information is concentrated in a very small number of large-magnitude Fourier coefficients, allowing for substantial sparsification with acceptable reconstruction quality. Finally, the runtime analysis clearly illustrated the dramatic performance difference between the naïve 2D DFT and the 2D FFT: while the naïve method becomes impractical for moderately sized inputs, the FFT scales efficiently and remains fast even for large matrices.\\
 \\
-Overall, this assignment reinforced the importance of Fourier transforms not only as a foundational mathematical tool, but also as a practical computational technique. Implementing the transform manually revealed how structural properties; symmetry, separability, and divide-and-conquer, enable massive performance gains. The applications to denoising, compression, and runtime benchmarking highlight the FFT’s central role in modern signal and image processing, where efficiency and accuracy are equally important.
-
-\section{Appendix}
+Overall, this assignment reinforced the importance of Fourier transforms not only as a foundational mathematical tool, but also as a practical computational technique. Implementing the transform manually revealed how structural properties like symmetry, separability, and divide-and-conquer, enable massive performance gains. The applications to denoising, compression, and runtime benchmarking highlight the FFT’s central role in modern signal and image processing, where efficiency and accuracy are equally important.
 
 \end{document}

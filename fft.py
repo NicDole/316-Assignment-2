@@ -2,9 +2,6 @@
 """
 ECSE 316 - Assignment 2
 FFT implementation and applications.
-
-Fill in all TODO blocks with your own code.
-Do not use np.fft for the core algorithms.
 """
 
 import argparse
@@ -53,7 +50,7 @@ def dft_naive_1d(x):
 def fft_1d(x):
     """
     Cooley Tukey FFT for 1D arrays.
-    Assume length is a power of 2 (you can pad before calling).
+    Assume length is a power of 2 (pad before calling).
 
     Parameters
     ----------
@@ -194,8 +191,6 @@ def naive_dft_2d(arr):
 def load_image(path, default_size=None):
     """
     Load image as grayscale float64 in range [0, 1].
-
-    If cv2 is available you can use it. Otherwise use matplotlib.
     """
     if cv2 is not None:
         img = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
@@ -324,7 +319,7 @@ def run_mode1(image_path):
     orig_rows, orig_cols = img.shape
     img_padded = pad_to_power_of_two(img)
 
-    # Compute 2D FFT using your own implementation
+    # Compute 2D FFT 
     F = fft_2d(img_padded)
 
     # Shift for better visualization and take magnitude
@@ -358,8 +353,6 @@ def run_mode2(image_path):
     # Shift to put low frequencies in the center
     F_shifted = fftshift_2d(F)
 
-    # Design a low frequency mask
-    # You can tune radius_ratio for better denoising performance
     mask = low_frequency_mask(F_shifted.shape, radius_ratio=0.2)
 
     # Apply mask in frequency domain
@@ -544,7 +537,7 @@ def parse_args():
         "-i",
         "--image",
         type=str,
-        default="input.png",  # replace with provided default image name
+        default="moonlanding.png", 
         help="Input image file path",
     )
     return parser.parse_args()
